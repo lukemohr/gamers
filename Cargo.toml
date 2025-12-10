@@ -1,0 +1,2 @@
+[workspace]
+members = ["solver_core", "solver_cli"]
