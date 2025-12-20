@@ -35,6 +35,20 @@ pub trait GameState: Clone {
     /// If state is non-terminal, return None.
     fn terminal_value(&self) -> Option<i32>;
 
+    /// Returns a heuristic evaluation of the position from Player1's perspective.
+    ///
+    /// By convention:
+    /// - Large positive values = good for Player1
+    /// - Large negative values = good for Player2
+    /// - 0 = roughly equal
+    ///
+    /// Default implementation:
+    /// - If the position is terminal, return its terminal value
+    /// - Otherwise, return 0 (neutral)
+    fn heuristic_value(&self) -> i32 {
+        self.terminal_value().unwrap_or(0)
+    }
+
     /// Returns an integer priority score for a given move.
     /// Higher scores will be explored earlier by the solver.
     /// Default implementation returns 0 for all moves.
