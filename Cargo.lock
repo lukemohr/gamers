@@ -5,6 +5,9 @@ version = 4
 [[package]]
 name = "solver_cli"
 version = "0.1.0"
+dependencies = [
+ "solver_core",
+]
 
 [[package]]
 name = "solver_core"
