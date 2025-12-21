@@ -351,6 +351,83 @@ impl GameState for BitboardState {
     }
 }
 
+/// Pretty-prints a Connect Four bitboard state to stdout.
+///
+/// Display convention:
+/// - 7 columns (0..6)
+/// - 6 rows (0..5), row 0 at the top, row 5 at the bottom.
+/// - Use:
+///   - 'X' for Player1 discs
+///   - 'O' for Player2 discs
+///   - '.' for empty cells
+///
+/// Example:
+///   . . . . . . .
+///   . . . . . . .
+///   . . . X . . .
+///   . . O X . . .
+///   . X X O . . .
+///   O O X X . . .
+pub fn print_c4_board_bitboard(state: &BitboardState) {
+    let p1_bb = state.player_bb;
+    let p2_bb = state.p2_bb();
+    for row in (0..ROWS).rev() {
+        let marks = (0..COLS)
+            .map(|col| {
+                let bit_index = BitboardState::idx(row, col);
+                let mask = 1u64 << (bit_index as u64);
+
+                if p1_bb & mask != 0 {
+                    'X'
+                } else if p2_bb & mask != 0 {
+                    'O'
+                } else {
+                    '.'
+                }
+            })
+            .fold(String::new(), |mut acc, c| {
+                if !acc.is_empty() {
+                    acc.push_str(" | ");
+                }
+                acc.push(c);
+                acc
+            });
+        println!(" {marks}");
+        if row > 0 {
+            println!("---+---+---+---+---+---+---");
+        }
+    }
+}
+
+/// Parses a user input string into a Connect Four column index (0..=6).
+///
+/// Expected format:
+/// - A single digit "0".."6".
+///
+/// This function:
+/// - Trims whitespace
+/// - Parses the number
+/// - Checks it is in 0..=6
+/// - Checks that the chosen column is not full in `state`
+///
+/// Returns:
+/// - Ok(col) where col is a valid column index
+/// - Err(...) with a human-readable message on invalid input
+pub fn parse_c4_move(input: &str, state: &BitboardState) -> Result<u8, String> {
+    let clean = input.trim();
+    // Try to parse as usize
+    let col: usize = clean
+        .parse()
+        .map_err(|_| "Could not parse input as a number in 0..=6".to_string())?;
+    if col >= COLS as usize {
+        return Err("Column must be between 0 and 6".to_string());
+    }
+    if state.heights[col] >= ROWS {
+        return Err("Column is full".to_string());
+    }
+    Ok(col as u8)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
