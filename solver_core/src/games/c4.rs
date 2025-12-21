@@ -204,8 +204,61 @@ impl ConnectFourState {
     /// You may ignore gravity correctness here for now; later, we can add validation
     /// that the board is "physically legal" (no discs floating above empties).
     pub fn from_str(repr: &str, current_player: Player) -> Result<Self, String> {
-        // TODO: parse repr into board + heights + current_player.
-        unimplemented!()
+        // 1) Validate length = 42 exactly.
+        if repr.len() != 42 {
+            return Err(format!(
+                "Connect Four board string must have length 42, got {}",
+                repr.len()
+            ));
+        }
+
+        // 2) Parse characters into cells.
+        let mut board = [C4Cell::Empty; 42];
+        for (i, ch) in repr.chars().enumerate() {
+            board[i] = match ch {
+                '.' => C4Cell::Empty,
+                'X' => C4Cell::P1,
+                'O' => C4Cell::P2,
+                other => return Err(format!("Invalid character '{}' at index {}", other, i)),
+            };
+        }
+
+        // 3) Recompute heights and ensure gravity is respected.
+        //
+        // heights[c] counts how many discs are in column c, starting from bottom row 5 upward.
+        let mut heights = [0u8; 7];
+
+        for col in 0..7 {
+            let mut h = 0u8;
+
+            // count upward from bottom row = 5 to row 0
+            for row in (0..6).rev() {
+                let idx = (row as usize) * 7 + (col as usize);
+                match board[idx] {
+                    C4Cell::Empty => break, // column stops here
+                    C4Cell::P1 | C4Cell::P2 => h += 1,
+                }
+            }
+
+            // Check gravity: ensure no disc appears above an empty space.
+            for row in 0..(6 - h as usize) {
+                let idx = row * 7 + col as usize;
+                if board[idx] != C4Cell::Empty {
+                    return Err(format!(
+                        "Illegal board: disc at ({}, {}) is floating above an empty cell",
+                        row, col
+                    ));
+                }
+            }
+
+            heights[col as usize] = h;
+        }
+
+        Ok(Self {
+            board,
+            heights,
+            current_player,
+        })
     }
 }
 

@@ -77,12 +77,9 @@ pub fn minimax_value_ab<G: GameState>(state: &G, mut alpha: i32, mut beta: i32) 
     let maximizing = state.current_player() == Player::Player1;
     let mut value = if maximizing { i32::MIN } else { i32::MAX };
     let mut moves = state.legal_moves();
-    // Sort descending for maximizing, ascending for minimizing
-    if maximizing {
-        moves.sort_by_key(|m| std::cmp::Reverse(state.move_ordering_key(m)));
-    } else {
-        moves.sort_by_key(|m| state.move_ordering_key(m));
-    }
+
+    // Higher move_ordering_key = more promising for the current player
+    moves.sort_by_key(|m| std::cmp::Reverse(state.move_ordering_key(m)));
     for mv in &moves {
         let child_value = minimax_value_ab(&state.apply_move(mv), alpha, beta);
 
@@ -118,12 +115,8 @@ fn minimax_best_move_ab_inner<G: GameState>(
     }
     let maximizing = state.current_player() == Player::Player1;
 
-    // Sort descending for maximizing, ascending for minimizing
-    if maximizing {
-        moves.sort_by_key(|m| std::cmp::Reverse(state.move_ordering_key(m)));
-    } else {
-        moves.sort_by_key(|m| state.move_ordering_key(m));
-    }
+    // Higher move_ordering_key = more promising for the current player
+    moves.sort_by_key(|m| std::cmp::Reverse(state.move_ordering_key(m)));
 
     let mut best_value = if maximizing { i32::MIN } else { i32::MAX };
     let mut best_move = None;
@@ -165,4 +158,146 @@ fn minimax_best_move_ab_inner<G: GameState>(
 /// This should prune as much as possible during search.
 pub fn minimax_best_move_ab<G: GameState>(state: &G) -> Option<(G::Move, i32)> {
     minimax_best_move_ab_inner(state, i32::MIN, i32::MAX)
+}
+
+/// Depth-limited alpha-beta minimax.
+///
+/// - `depth` = maximum remaining ply to search.
+/// - Uses `state.heuristic_value()` when depth == 0 or at terminal states.
+pub fn minimax_value_ab_depth<G: GameState>(
+    state: &G,
+    depth: u32,
+    mut alpha: i32,
+    mut beta: i32,
+) -> i32 {
+    if let Some(v) = state.terminal_value() {
+        return v * 1_000_000;
+    }
+
+    // At depth 0, use the heuristic only (non-terminal states).
+    if depth == 0 {
+        return state.heuristic_value();
+    }
+    let maximizing = state.current_player() == Player::Player1;
+    let mut value = if maximizing { i32::MIN } else { i32::MAX };
+    let mut moves = state.legal_moves();
+
+    // Higher move_ordering_key = more promising for the current player
+    moves.sort_by_key(|m| std::cmp::Reverse(state.move_ordering_key(m)));
+
+    for mv in &moves {
+        let child_value = minimax_value_ab_depth(&state.apply_move(mv), depth - 1, alpha, beta);
+
+        if maximizing {
+            value = value.max(child_value);
+            alpha = alpha.max(value);
+        } else {
+            value = value.min(child_value);
+            beta = beta.min(value);
+        }
+
+        if alpha >= beta {
+            break;
+        }
+    }
+    value
+}
+
+/// Convenience wrapper using full [-∞, +∞] initial bounds.
+pub fn minimax_value_ab_depth_root<G: GameState>(state: &G, depth: u32) -> i32 {
+    minimax_value_ab_depth(state, depth, i32::MIN, i32::MAX)
+}
+
+/// Returns the best move and its value at the given search depth.
+/// Uses depth-limited alpha-beta with heuristic cutoff.
+pub fn minimax_best_move_ab_depth_inner<G: GameState>(
+    state: &G,
+    depth: u32,
+    mut alpha: i32,
+    mut beta: i32,
+) -> Option<(G::Move, i32)> {
+    let mut moves = state.legal_moves();
+    if moves.is_empty() {
+        return None;
+    }
+    let maximizing = state.current_player() == Player::Player1;
+
+    // Higher move_ordering_key = more promising for the current player
+    moves.sort_by_key(|m| std::cmp::Reverse(state.move_ordering_key(m)));
+
+    let mut best_value = if maximizing { i32::MIN } else { i32::MAX };
+    let mut best_move = None;
+
+    for mv in &moves {
+        let child_value = minimax_value_ab_depth(&state.apply_move(mv), depth - 1, alpha, beta);
+
+        let is_better = if maximizing {
+            child_value > best_value
+        } else {
+            child_value < best_value
+        };
+
+        if is_better {
+            best_value = child_value;
+            best_move = Some(mv.clone());
+        }
+
+        if maximizing {
+            alpha = alpha.max(best_value);
+        } else {
+            beta = beta.min(best_value);
+        }
+
+        if alpha >= beta {
+            break;
+        }
+    }
+
+    best_move.map(|m| (m, best_value))
+}
+
+pub fn minimax_best_move_ab_depth<G: GameState>(state: &G, depth: u32) -> Option<(G::Move, i32)> {
+    minimax_best_move_ab_depth_inner(state, depth, i32::MIN, i32::MAX)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::games::c4_bitboard::BitboardState;
+    use crate::games::ttt::TicTacToeState;
+
+    #[test]
+    fn minimax_and_ab_agree_on_ttt_start() {
+        let s = TicTacToeState::new();
+        let v_plain = minimax_value(&s);
+        let v_ab = minimax_value_ab_root(&s);
+        assert_eq!(v_plain, v_ab);
+    }
+
+    #[test]
+    fn minimax_best_move_returns_same_value_as_value_function() {
+        let s = TicTacToeState::new();
+        let v_plain = minimax_value(&s);
+        let (_mv, v_best) = minimax_best_move(&s).expect("there should be legal moves");
+        assert_eq!(v_plain, v_best);
+    }
+
+    #[test]
+    fn depth_limited_search_matches_full_search_on_ttt_at_full_depth() {
+        let s = TicTacToeState::new();
+        let v_full = minimax_value_ab_root(&s); // -1, 0, or 1
+        let v_depth = minimax_value_ab_depth_root(&s, 9); // -1e6, 0, or 1e6
+
+        assert_eq!(v_depth, v_full * 1_000_000);
+    }
+
+    #[test]
+    fn c4_depth_zero_uses_heuristic() {
+        let s = BitboardState::new();
+        let v0 = minimax_value_ab_depth_root(&s, 0);
+        let v1 = minimax_value_ab_depth_root(&s, 1);
+
+        assert_eq!(v0, s.heuristic_value());
+        assert!(v1 >= v0);
+    }
 }

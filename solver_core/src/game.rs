@@ -49,8 +49,8 @@ pub trait GameState: Clone {
         self.terminal_value().unwrap_or(0)
     }
 
-    /// Returns an integer priority score for a given move.
-    /// Higher scores will be explored earlier by the solver.
+    /// Returns a heuristic key for move ordering from the perspective of the
+    /// player to move in this state. Higher values should be explored earlier.
     /// Default implementation returns 0 for all moves.
     #[allow(unused_variables)]
     fn move_ordering_key(&self, mv: &Self::Move) -> i32 {
